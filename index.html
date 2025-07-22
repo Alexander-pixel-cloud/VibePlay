@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VibePlay 🎧</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/727/727218.png" />
+  <style>
+    @keyframes scrollText {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+
+    #songTitleScroll {
+      white-space: nowrap;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #songTitleScroll span {
+      display: inline-block;
+      animation: scrollText 10s linear infinite;
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white font-sans p-4">
+  <div class="max-w-xl mx-auto space-y-6">
+    <h1 class="text-3xl font-bold text-center">🎧 VibePlay - Vibe Software</h1>
+
+    <!-- Scrolling Title -->
+    <div id="songTitleScroll" class="h-8 text-center text-lg font-semibold">
+      <span id="scrollingTitle"></span>
+    </div>
+
+    <!-- Durasi dan Seek -->
+    <div class="flex items-center justify-between text-sm">
+      <span id="currentTime">0:00</span>
+      <input id="seekSlider" type="range" min="0" max="100" value="0" class="w-full mx-2" />
+      <span id="totalTime">0:00</span>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex items-center justify-center space-x-4 text-3xl">
+      <button id="prev" class="hover:text-blue-400">⏮</button>
+      <button id="playPause" class="hover:text-blue-400">▶</button>
+      <button id="next" class="hover:text-blue-400">⏭</button>
+      <button id="loopBtn" class="text-yellow-400 hover:text-yellow-500 text-xl" title="Loop">🔁</button>
+    </div>
+
+    <!-- Volume -->
+    <input id="volume" type="range" min="0" max="1" step="0.01" value="1" class="w-full" />
+
+    <!-- Lirik -->
+    <div class="mt-2 p-2 rounded bg-gray-800 text-sm text-center" id="lyricsBox">
+      🎤 <em>Lirik otomatis belum tersedia.</em>
+    </div>
+
+    <!-- Add Music -->
+    <div class="space-y-2">
+      <label class="font-semibold block">🔗 Tambah lagu via link .mp3</label>
+      <input id="musicTitle" type="text" placeholder="🎶 Judul lagu" class="w-full p-2 rounded bg-gray-800 text-white" />
+      <input id="musicURL" type="url" placeholder="https://..." class="w-full p-2 rounded bg-gray-800 text-white" />
+      <button id="addMusic" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-bold">Add via URL</button>
+    </div>
+
+    <div>
+      <label class="block font-semibold mb-1">📁 Tambah dari file lokal</label>
+      <label class="w-full flex items-center justify-center px-4 py-2 bg-gray-800 rounded cursor-pointer hover:bg-gray-700">
+        <input id="musicFile" type="file" accept="audio/*" class="hidden" />
+        <span>📂 Pilih File Musik</span>
+      </label>
+    </div>
+
+    <!-- Track List -->
+    <div id="trackList" class="space-y-2 text-sm text-white"></div>
+
+    <!-- Dev & Log -->
+    <div class="flex gap-2">
+      <button id="devBtn" class="w-1/2 border border-white py-2 rounded hover:bg-gray-800 font-semibold">👤 Developer</button>
+      <button id="logBtn" class="w-1/2 border border-white py-2 rounded hover:bg-gray-800 font-semibold">📝 Change Logs</button>
+    </div>
+
+    <div id="devInfo" class="hidden mt-2 p-4 border border-gray-600 rounded bg-gray-800 text-sm">
+      <p><strong>🎧 VibePlay</strong> by <strong>HalimKen</strong></p>
+      <p>📦 Part of <strong>Vibe Software</strong></p>
+      <p>🚀 Bisa play musik dari link atau file langsung</p>
+    </div>
+
+    <div id="logInfo" class="hidden mt-2 p-4 border border-yellow-600 rounded bg-yellow-800 text-sm">
+      <p><strong>📝 Changelog:</strong></p>
+      <ul class="list-disc ml-4">
+        <li>Loop Mode</li>
+        <li>Slider waktu + durasi lagu</li>
+        <li>Lirik placeholder</li>
+        <li>Fix play setelah hapus</li>
+      </ul>
+    </div>
+  </div>
+
+  <audio id="audio" preload="auto"></audio>
+
+  <script>
+    const defaultMusic = {
+      title: "Contoh Musik Bawaan",
+      url: "https://j.top4top.io/m_3489infls0.mp3"
+    };
+
+    let musicList = JSON.parse(localStorage.getItem("vibeplay_tracks")) || [defaultMusic];
+    let currentIndex = 0;
+    let isLooping = false;
+
+    const audio = document.getElementById("audio");
+    const playPauseBtn = document.getElementById("playPause");
+    const volumeSlider = document.getElementById("volume");
+    const seekSlider = document.getElementById("seekSlider");
+    const scrollingTitle = document.getElementById("scrollingTitle");
+    const trackListDiv = document.getElementById("trackList");
+    const currentTimeEl = document.getElementById("currentTime");
+    const totalTimeEl = document.getElementById("totalTime");
+    const loopBtn = document.getElementById("loopBtn");
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s < 10 ? '0' + s : s}`;
+    }
+
+    function updateScrollingTitle(title) {
+      scrollingTitle.textContent = title;
+    }
+
+    function playTrack() {
+      const track = musicList[currentIndex];
+      audio.src = track.url;
+      audio.play();
+      updateScrollingTitle(track.title);
+      playPauseBtn.textContent = "║║";
+      renderTrackList();
+    }
+
+    function renderTrackList() {
+      trackListDiv.innerHTML = "";
+      musicList.forEach((track, index) => {
+        const item = document.createElement("div");
+        item.className = "flex justify-between items-center bg-gray-800 rounded p-2";
+        item.innerHTML = `
+          <span>${index + 1}. ${track.title}</span>
+          <div class="space-x-2">
+            <button onclick="playThis(${index})" class="text-green-400 hover:underline">Play</button>
+            <button onclick="deleteTrack(${index})" class="text-red-400 hover:underline">Hapus</button>
+          </div>
+        `;
+        trackListDiv.appendChild(item);
+      });
+    }
+
+    window.playThis = (index) => {
+      currentIndex = index;
+      playTrack();
+    };
+
+    window.deleteTrack = (index) => {
+      musicList.splice(index, 1);
+      if (musicList.length === 0) {
+        musicList.push(defaultMusic);
+        currentIndex = 0;
+      } else if (currentIndex >= musicList.length) {
+        currentIndex = musicList.length - 1;
+      }
+      localStorage.setItem("vibeplay_tracks", JSON.stringify(musicList));
+      playTrack();
+    };
+
+    playPauseBtn.onclick = () => {
+      if (audio.paused) {
+        audio.play();
+        playPauseBtn.textContent = "║║";
+      } else {
+        audio.pause();
+        playPauseBtn.textContent = "▶";
+      }
+    };
+
+    document.getElementById("next").onclick = () => {
+      currentIndex = (currentIndex + 1) % musicList.length;
+      playTrack();
+    };
+
+    document.getElementById("prev").onclick = () => {
+      currentIndex = (currentIndex - 1 + musicList.length) % musicList.length;
+      playTrack();
+    };
+
+    loopBtn.onclick = () => {
+      isLooping = !isLooping;
+      loopBtn.style.color = isLooping ? "lightgreen" : "#facc15";
+      audio.loop = isLooping;
+    };
+
+    volumeSlider.oninput = () => {
+      audio.volume = volumeSlider.value;
+    };
+
+    seekSlider.oninput = () => {
+      audio.currentTime = (seekSlider.value / 100) * audio.duration;
+    };
+
+    audio.ontimeupdate = () => {
+      seekSlider.value = (audio.currentTime / audio.duration) * 100;
+      currentTimeEl.textContent = formatTime(audio.currentTime);
+      totalTimeEl.textContent = formatTime(audio.duration);
+    };
+
+    document.getElementById("addMusic").onclick = () => {
+      const title = document.getElementById("musicTitle").value.trim();
+      const url = document.getElementById("musicURL").value.trim();
+      if (title && url.endsWith(".mp3")) {
+        musicList.push({ title, url });
+        localStorage.setItem("vibeplay_tracks", JSON.stringify(musicList));
+        document.getElementById("musicTitle").value = '';
+        document.getElementById("musicURL").value = '';
+        renderTrackList();
+        alert("Lagu ditambahkan!");
+      } else {
+        alert("Masukkan judul dan link .mp3 valid.");
+      }
+    };
+
+    document.getElementById("musicFile").onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const fileURL = URL.createObjectURL(file);
+        const title = file.name;
+        musicList.push({ title, url: fileURL });
+        currentIndex = musicList.length - 1;
+        localStorage.setItem("vibeplay_tracks", JSON.stringify(musicList));
+        playTrack();
+      }
+    };
+
+    document.getElementById("devBtn").onclick = () => {
+      document.getElementById("devInfo").classList.toggle("hidden");
+    };
+
+    document.getElementById("logBtn").onclick = () => {
+      document.getElementById("logInfo").classList.toggle("hidden");
+    };
+
+    updateScrollingTitle(musicList[0].title);
+    renderTrackList();
+  </script>
+</body>
+</html>
